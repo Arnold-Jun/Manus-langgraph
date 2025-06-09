@@ -1,0 +1,32 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: manus-langgraph
+  main:
+    web-application-type: none
+    banner-mode: off
+  ai:
+    openai:
+      api-key: QST2c24254876416ea3f17fd2c3ee3c0095
+      base-url: http://redservingapi.devops.xiaohongshu.com
+      chat:
+        options:
+          # 模型ID,需要替换为实际的接入点ID
+          model: qwq-32b
+        # Chat接口路径,与OpenAI接口保持一致
+        completions-path: /v1/chat/completions
+
+manus:
+  workspace-root: ${user.dir}
+  max-steps: 20
+  max-observe: 10000
+  duplicate-threshold: 2
+
+logging:
+  level:
+    com.Manus: INFO
+    org.springframework.ai: INFO
+    org.springframework.boot: WARN
+
