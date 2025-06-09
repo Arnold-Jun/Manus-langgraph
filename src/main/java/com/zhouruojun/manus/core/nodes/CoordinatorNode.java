@@ -23,7 +23,10 @@ public class CoordinatorNode extends BaseNode {
         4. human_input - 当需要用户进一步输入时
         
         请分析用户的请求，选择最合适的下一步行动。
-        如果任务已经完成或可以基于现有信息进行总结，请选择summary。
+        特殊情况处理：
+        - 如果用户询问之前的问题或对话历史，直接选择summary
+        - 如果任务已经完成或可以基于现有信息进行总结，请选择summary
+        - 如果用户请求涉及历史上下文，通常应该选择summary来整合回答
         
         请**严格**按照以下规范生成回复，**不要**输出任何额外文字、注释或代码块之外的内容：
             输出格式：
@@ -44,7 +47,14 @@ public class CoordinatorNode extends BaseNode {
         
         // 构建上下文信息
         StringBuilder contextBuilder = new StringBuilder();
+        
+        // 添加用户请求信息
         contextBuilder.append("用户请求: ").append(userInput).append("\n");
+        
+        // 如果有历史记录，添加提示信息
+        if (state.hasHistory()) {
+            contextBuilder.append("注意: 此问题基于之前的对话历史，请结合历史上下文进行分析。\n");
+        }
         
         // 如果有之前的工具结果，包含进来
         String toolResults = state.toolResults().orElse("");

@@ -14,6 +14,7 @@ import org.springframework.util.MimeType;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,12 +26,14 @@ import java.util.Map;
  */
 @Getter
 @Setter
-public class Message {
+public class Message implements Serializable {
+    private static final long serialVersionUID = 1L;
+    
     private Role role;
     private String content;
     private String base64Image;
     private String toolCallId;
-    private org.springframework.ai.chat.messages.Message springMessage;
+    private transient org.springframework.ai.chat.messages.Message springMessage;  // 标记为transient，不参与序列化
 
     public Message(Role role, String content, String base64Image, String toolCallId) {
         Assert.notNull(role, "Role cannot be null");
@@ -205,6 +208,23 @@ public class Message {
      * Gets the Spring AI message
      */
     public org.springframework.ai.chat.messages.Message getSpringMessage() {
+        if (this.springMessage == null) {
+            this.springMessage = convertToSpringMessage();
+        }
         return this.springMessage;
+    }
+
+    /**
+     * Explicit getter for role field (in case Lombok doesn't work)
+     */
+    public Role getRole() {
+        return this.role;
+    }
+
+    /**
+     * Explicit getter for content field (in case Lombok doesn't work)
+     */
+    public String getContent() {
+        return this.content;
     }
 }

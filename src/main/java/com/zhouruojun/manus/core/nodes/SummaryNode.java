@@ -40,13 +40,34 @@ public class SummaryNode extends BaseNode {
         StringBuilder replyContext = new StringBuilder();
         replyContext.append("用户问题: ").append(userInput).append("\n");
         
+        // 如果有历史记录，在这里可以提供历史上下文信息
+        if (state.hasHistory()) {
+            replyContext.append("\n这是一个基于历史对话的问题。\n");
+            replyContext.append("以下是对话历史记录：\n");
+            
+            // 获取历史记录
+            java.util.List<com.zhouruojun.manus.model.Message> history = state.getSessionHistory();
+            for (int i = 0; i < history.size(); i++) {
+                com.zhouruojun.manus.model.Message msg = history.get(i);
+                String roleStr = msg.getRole().getValue();
+                String prefix = "user".equals(roleStr) ? "用户" : "系统";
+                replyContext.append(String.format("%d. %s: %s\n", i+1, prefix, msg.getContent()));
+            }
+            replyContext.append("请注意用户可能在询问之前的对话内容、问题或相关信息。\n");
+        }
+        
         // 检查是否有工具执行结果
         String existingToolResults = state.toolResults().orElse("");
         if (!existingToolResults.isEmpty()) {
             replyContext.append("可用信息: \n").append(existingToolResults).append("\n");
             replyContext.append("请基于以上信息为用户生成一个完整、有用的回复。");
         } else {
-            replyContext.append("请直接针对用户的问题生成一个有帮助的回复。");
+            if (state.hasHistory()) {
+                replyContext.append("请基于对话历史上下文为用户生成一个有帮助的回复。");
+                replyContext.append("如果用户询问之前的问题，请尽量根据可能的历史信息进行回答。");
+            } else {
+                replyContext.append("请直接针对用户的问题生成一个有帮助的回复。");
+            }
         }
         
         // 调用语言模型生成最终回复
