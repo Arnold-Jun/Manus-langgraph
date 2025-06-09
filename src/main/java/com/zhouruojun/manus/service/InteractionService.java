@@ -1,6 +1,6 @@
 package com.zhouruojun.manus.service;
 
-import com.zhouruojun.manus.core.LangGraphWorkflowEngine;
+import com.zhouruojun.manus.core.WorkflowEngine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +18,7 @@ public class InteractionService {
     /**
      * 启动交互式会话
      */
-    public void startInteractiveSession(LangGraphWorkflowEngine workflowEngine) {
+    public void startInteractiveSession(WorkflowEngine workflowEngine) {
         log.info("🎯 多智能体系统已准备就绪，可以开始交互");
         log.info("📝 输入 'exit' 退出程序");
         log.info("📝 输入 'help' 查看帮助信息");
@@ -62,7 +62,7 @@ public class InteractionService {
     /**
      * 处理用户输入
      */
-    private void processUserInput(LangGraphWorkflowEngine workflowEngine, String userInput, String sessionId) {
+    private void processUserInput(WorkflowEngine workflowEngine, String userInput, String sessionId) {
         log.info("🔄 正在处理您的请求: {}", userInput);
         
         try {

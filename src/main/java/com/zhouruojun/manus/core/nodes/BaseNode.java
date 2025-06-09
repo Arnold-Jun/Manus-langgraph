@@ -1,6 +1,9 @@
 package com.zhouruojun.manus.core.nodes;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhouruojun.manus.model.AgentMessageState;
+import com.zhouruojun.manus.model.NextAction;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -8,6 +11,8 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.bsc.langgraph4j.action.NodeAction;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.List;
 import java.util.Map;
 
@@ -19,6 +24,9 @@ import java.util.Map;
 public abstract class BaseNode implements NodeAction<AgentMessageState> {
 
     protected final ChatModel chatModel;
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final Pattern JSON_PATTERN = Pattern.compile("\\{[\\s\\S]*\\}");
 
     public BaseNode(ChatModel chatModel) {
         this.chatModel = chatModel;
@@ -73,20 +81,32 @@ public abstract class BaseNode implements NodeAction<AgentMessageState> {
      * 解析下一步动作
      */
     protected String parseNextAction(String response) {
-        String lowercaseResponse = response.toLowerCase();
-        
-        if (lowercaseResponse.contains("搜索") || lowercaseResponse.contains("search")) {
-            return "search";
-        } else if (lowercaseResponse.contains("分析") || lowercaseResponse.contains("analysis")) {
-            return "analysis";
-        } else if (lowercaseResponse.contains("总结") || lowercaseResponse.contains("summary")) {
-            return "summary";
-        } else if (lowercaseResponse.contains("用户输入") || lowercaseResponse.contains("human_input")) {
-            return "human_input";
-        } else if (lowercaseResponse.contains("完成") || lowercaseResponse.contains("finish")) {
-            return "FINISH";
+        try {
+            // 1. 从整个响应里提取第一段 {...} JSON
+            Matcher m = JSON_PATTERN.matcher(response.trim());
+            if (m.find()) {
+                String json = m.group();
+                JsonNode root = MAPPER.readTree(json);
+
+                // 2. 读取 action 字段
+                if (root.has("action")) {
+                    String act = root.get("action").asText();
+                    return NextAction.fromString(act).getValue();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("JSON 解析失败，转入备用逻辑", e);
         }
-        
-        return "FINISH"; // 默认完成
+
+        // 3. 备用：如果真的不是标准 JSON，那再按最简激进策略——只看开头 prefix
+        String lower = response.stripLeading().toLowerCase();
+        if (lower.startsWith("search:") || lower.startsWith("搜索："))       return NextAction.SEARCH.getValue();
+        if (lower.startsWith("analysis:") || lower.startsWith("分析："))   return NextAction.ANALYSIS.getValue();
+        if (lower.startsWith("summary:") || lower.startsWith("总结："))    return NextAction.SUMMARY.getValue();
+        if (lower.startsWith("human_input:") || lower.startsWith("用户输入：")) return NextAction.HUMAN_INPUT.getValue();
+        if (lower.startsWith("finish:") || lower.startsWith("完成："))     return NextAction.FINISH.getValue();
+
+        // 4. 最后兜底
+        return NextAction.FINISH.getValue();
     }
-} 
+}

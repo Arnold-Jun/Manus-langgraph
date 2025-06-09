@@ -46,7 +46,7 @@ public class AnalysisNode extends BaseNode {
         
         // 调用语言模型执行分析
         String analysisResult = callChatModel(SYSTEM_PROMPT, analysisContext.toString());
-        
+
         // 创建AI响应消息
         var aiMessage = AgentMessageState.createAiMessage("分析结果: " + analysisResult);
         

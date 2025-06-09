@@ -39,7 +39,8 @@ public class SearchNode extends BaseNode {
         
         // 调用语言模型执行搜索
         String searchResult = callChatModel(SYSTEM_PROMPT, searchContext.toString());
-        
+
+        System.err.println("SearchNode: " + searchResult);
         // 创建AI响应消息
         var aiMessage = AgentMessageState.createAiMessage("搜索结果: " + searchResult);
         

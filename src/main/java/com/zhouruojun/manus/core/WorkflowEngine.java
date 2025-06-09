@@ -33,7 +33,7 @@ import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
  */
 @Slf4j
 @Component
-public class LangGraphWorkflowEngine {
+public class WorkflowEngine {
 
     private ChatModel chatModel;
     private MemorySaver checkpointSaver;
@@ -43,8 +43,8 @@ public class LangGraphWorkflowEngine {
 
     // 删除旧的构造函数，用这一个替代
     @Autowired
-    public LangGraphWorkflowEngine(ChatModel chatModel,
-                                 @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public WorkflowEngine(ChatModel chatModel,
+                          @org.springframework.beans.factory.annotation.Autowired(required = false)
                                  StateSerializer<AgentMessageState> serializer) {
         this.chatModel = chatModel;
         this.checkpointSaver = new MemorySaver();
@@ -76,7 +76,19 @@ public class LangGraphWorkflowEngine {
         // 路由函数
         EdgeAction<AgentMessageState> coordinatorRouter = (AgentMessageState state) -> {
             String next = state.next().orElse("FINISH");
+            // 确保next值不为空，如果为空或为空字符串，默认为FINISH
+            if (next == null || next.isEmpty()) {
+                next = "FINISH";
+            }
             log.info("Coordinator routing to: {}", next);
+
+            // 检查next是否在条件边映射中存在
+            if (!Map.of("search", "search", "analysis", "analysis", "summary", "summary",
+                       "human_input", "human_input", "FINISH", "FINISH").containsKey(next)) {
+                log.warn("无效的路由目标: {}，默认转为FINISH", next);
+                next = "FINISH";
+            }
+
             return next;
         };
 
@@ -129,7 +141,9 @@ public class LangGraphWorkflowEngine {
                 Map<String, Object> initialData = Map.of(
                     "userInput", userInput,
                     "sessionId", sessionId,
-                    "messages", AgentMessageState.createUserMessage(userInput)
+                    "messages", AgentMessageState.createUserMessage(userInput),
+                    "next", "coordinator", // 确保有明确的初始目标节点
+                    "currentAgent", "start" // 添加当前代理字段
                 );
 
                 // 运行配置
@@ -148,7 +162,6 @@ public class LangGraphWorkflowEngine {
                 AgentMessageState lastState = null;
 
                 try {
-                    // 处理流式输出
                     for (NodeOutput<AgentMessageState> output : stream) {
                         AgentMessageState state = output.state();
                         String nodeName = output.node();

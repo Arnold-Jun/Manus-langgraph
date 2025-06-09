@@ -1,6 +1,6 @@
 package com.zhouruojun.manus;
 
-import com.zhouruojun.manus.core.LangGraphWorkflowEngine;
+import com.zhouruojun.manus.core.WorkflowEngine;
 import com.zhouruojun.manus.service.InteractionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -25,7 +25,7 @@ public class ManusApplication {
 
     @Bean
     public CommandLineRunner runManusSystem(
-            LangGraphWorkflowEngine workflowEngine,
+            WorkflowEngine workflowEngine,
             InteractionService interactionService) {
         return args -> {
             log.info("🚀 Manus多智能体系统启动中...");
