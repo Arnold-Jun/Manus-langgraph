@@ -14,25 +14,23 @@ import java.util.Map;
 public class CoordinatorNode extends BaseNode {
 
     private static final String SYSTEM_PROMPT = """
-        你是一个智能体协调器，负责解析用户请求并输出结构化 JSON，决定下一步的行动。
+        你是一个智能体协调器，负责分析用户请求并决定下一步的行动。
             
         你可以选择以下行动：
         1. search - 当需要搜索信息时
         2. analysis - 当需要分析数据时
-        3. summary - 当需要总结信息时
+        3. summary - 当任务完成或需要总结时（包括任务完成的情况）
         4. human_input - 当需要用户进一步输入时
-        5. FINISH - 当任务完成时
         
         请分析用户的请求，选择最合适的下一步行动。
-        如果任务已经完成，请回复包含"完成"或"FINISH"的响应。
-        如果需要执行某个动作，请在回复中明确包含动作名称。
+        如果任务已经完成或可以基于现有信息进行总结，请选择summary。
         
         请**严格**按照以下规范生成回复，**不要**输出任何额外文字、注释或代码块之外的内容：
             输出格式：
             ```json
             {
-              "action": "<search|analysis|summary|human_input|finish>",
-              "message": "<在这里填写对用户的自然语言回复>"
+              "action": "<search|analysis|summary|human_input>",
+              "reasoning": "<简短说明选择此行动的原因>"
             }
         """;
 
@@ -70,24 +68,14 @@ public class CoordinatorNode extends BaseNode {
         String nextAction = parseNextAction(response);
         
         // 创建AI响应消息
-        var aiMessage = AgentMessageState.createAiMessage(response);
+        var aiMessage = AgentMessageState.createAiMessage("协调器: " + response);
         
-        // 更新状态并返回
-        if ("FINISH".equals(nextAction)) {
-            return Map.of(
-                "next", "",
-                "currentAgent", "coordinator",
-                "finished", true,
-                "result", currentResult.isEmpty() ? response : currentResult,
-                "messages", aiMessage
-            );
-        } else {
-            return Map.of(
-                "next", nextAction,
-                "currentAgent", "coordinator",
-                "messages", aiMessage
-            );
-        }
+        // 更新状态并返回 - 所有路径都继续工作流，不直接结束
+        return Map.of(
+            "next", nextAction,
+            "currentAgent", "coordinator",
+            "messages", aiMessage
+        );
     }
 
     @Override

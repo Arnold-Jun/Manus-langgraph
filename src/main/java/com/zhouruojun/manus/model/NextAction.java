@@ -24,11 +24,11 @@ public enum NextAction {
     /**
      * 从字符串获取对应的枚举值
      * @param value 动作的字符串表示
-     * @return 对应的枚举值，如果没有匹配则返回FINISH
+     * @return 对应的枚举值，如果没有匹配则返回SUMMARY作为默认处理
      */
     public static NextAction fromString(String value) {
         if (value == null) {
-            return FINISH;
+            return SUMMARY;
         }
 
         String normalized = value.trim().toLowerCase();
@@ -49,9 +49,9 @@ public enum NextAction {
         } else if (normalized.contains("用户输入")) {
             return HUMAN_INPUT;
         } else if (normalized.contains("完成")) {
-            return FINISH;
+            return SUMMARY;  // 完成任务时路由到summary
         }
 
-        return FINISH; // 默认返回FINISH
+        return SUMMARY; // 默认返回SUMMARY进行最终处理
     }
 }

@@ -1,7 +1,8 @@
 package com.zhouruojun.manus.service;
 
 import com.zhouruojun.manus.core.WorkflowEngine;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Scanner;
@@ -12,8 +13,9 @@ import java.util.UUID;
  * 处理用户输入和工作流交互逻辑
  */
 @Service
-@Slf4j
 public class InteractionService {
+
+    private static final Logger log = LoggerFactory.getLogger(InteractionService.class);
 
     /**
      * 启动交互式会话

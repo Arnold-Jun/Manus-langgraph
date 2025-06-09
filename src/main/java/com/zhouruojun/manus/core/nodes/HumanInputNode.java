@@ -1,7 +1,8 @@
 package com.zhouruojun.manus.core.nodes;
 
 import com.zhouruojun.manus.model.AgentMessageState;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.bsc.langgraph4j.action.NodeAction;
 
 import java.util.Map;
@@ -9,8 +10,9 @@ import java.util.Map;
 /**
  * 人工输入节点 - 处理需要用户进一步输入的情况
  */
-@Slf4j
 public class HumanInputNode implements NodeAction<AgentMessageState> {
+
+    private static final Logger log = LoggerFactory.getLogger(HumanInputNode.class);
 
     @Override
     public Map<String, Object> apply(AgentMessageState state) throws Exception {
