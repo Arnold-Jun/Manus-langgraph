@@ -3,7 +3,8 @@ package com.zhouruojun.manus.core;
 import com.zhouruojun.manus.model.AgentMessageState;
 import com.zhouruojun.manus.core.nodes.*;
 import com.zhouruojun.manus.serializers.AgentSerializers;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.bsc.langgraph4j.serializer.StateSerializer;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
@@ -31,9 +32,10 @@ import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
  * 基于LangGraph4j的工作流引擎
  * 使用真正的StateGraph来构建多智能体协作工作流
  */
-@Slf4j
 @Component
 public class WorkflowEngine {
+
+    private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private ChatModel chatModel;
     private MemorySaver checkpointSaver;
@@ -75,18 +77,18 @@ public class WorkflowEngine {
 
         // 路由函数
         EdgeAction<AgentMessageState> coordinatorRouter = (AgentMessageState state) -> {
-            String next = state.next().orElse("FINISH");
-            // 确保next值不为空，如果为空或为空字符串，默认为FINISH
+            String next = state.next().orElse("summary");
+            // 确保next值不为空，如果为空或为空字符串，默认为summary
             if (next == null || next.isEmpty()) {
-                next = "FINISH";
+                next = "summary";
             }
             log.info("Coordinator routing to: {}", next);
 
             // 检查next是否在条件边映射中存在
             if (!Map.of("search", "search", "analysis", "analysis", "summary", "summary",
-                       "human_input", "human_input", "FINISH", "FINISH").containsKey(next)) {
-                log.warn("无效的路由目标: {}，默认转为FINISH", next);
-                next = "FINISH";
+                       "human_input", "human_input").containsKey(next)) {
+                log.warn("无效的路由目标: {}，默认转为summary", next);
+                next = "summary";
             }
 
             return next;
@@ -110,15 +112,16 @@ public class WorkflowEngine {
                         "search", "search",
                         "analysis", "analysis",
                         "summary", "summary",
-                        "human_input", "human_input",
-                        "FINISH", END
+                        "human_input", "human_input"
                     ))
 
                 // 各专业智能体完成后回到协调器
                 .addEdge("search", "coordinator")
                 .addEdge("analysis", "coordinator")
-                .addEdge("summary", "coordinator")
                 .addEdge("human_input", "coordinator")
+                
+                // summary节点直接连接到END，作为最终输出
+                .addEdge("summary", END)
                 ;
 
         // 编译配置

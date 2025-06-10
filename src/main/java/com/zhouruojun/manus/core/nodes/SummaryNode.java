@@ -13,15 +13,19 @@ import java.util.Map;
 public class SummaryNode extends BaseNode {
 
     private static final String SYSTEM_PROMPT = """
-        你是一个专业的总结智能体，擅长信息整合和报告生成。
+        你是一个专业的回复生成智能体，负责为用户生成最终的回复。
         
         你的主要职责是：
-        1. 整合所有可用的信息和分析结果
-        2. 生成清晰、结构化的总结报告
-        3. 突出关键发现和重要结论
-        4. 提供可行的建议或下一步行动
+        1. 分析用户的原始请求和所有可用信息
+        2. 如果有工具执行结果，进行整合和总结
+        3. 如果没有复杂信息，直接针对用户请求给出回复
+        4. 生成清晰、自然、有用的最终回复
         
-        请将所有信息整合成一个全面、准确的总结报告。
+        重要要求：
+        - 直接回复用户，不要使用JSON格式
+        - 回复要自然、友好、有帮助
+        - 如果有多个信息源，要进行合理整合
+        - 突出关键信息和结论
         """;
 
     public SummaryNode(ChatModel chatModel) {
@@ -32,35 +36,30 @@ public class SummaryNode extends BaseNode {
     protected Map<String, Object> processNode(AgentMessageState state) throws Exception {
         String userInput = state.userInput().orElse("");
         
-        // 构建总结上下文
-        StringBuilder summaryContext = new StringBuilder();
-        summaryContext.append("总结任务: ").append(userInput).append("\n");
+        // 构建回复生成上下文
+        StringBuilder replyContext = new StringBuilder();
+        replyContext.append("用户问题: ").append(userInput).append("\n");
         
-        // 包含所有工具结果
+        // 检查是否有工具执行结果
         String existingToolResults = state.toolResults().orElse("");
         if (!existingToolResults.isEmpty()) {
-            summaryContext.append("需要总结的信息: \n").append(existingToolResults).append("\n");
+            replyContext.append("可用信息: \n").append(existingToolResults).append("\n");
+            replyContext.append("请基于以上信息为用户生成一个完整、有用的回复。");
+        } else {
+            replyContext.append("请直接针对用户的问题生成一个有帮助的回复。");
         }
         
-        summaryContext.append("请生成一个完整的总结报告。");
-        
-        // 调用语言模型生成总结
-        String summaryResult = callChatModel(SYSTEM_PROMPT, summaryContext.toString());
+        // 调用语言模型生成最终回复
+        String finalReply = callChatModel(SYSTEM_PROMPT, replyContext.toString());
         
         // 创建AI响应消息
-        var aiMessage = AgentMessageState.createAiMessage("总结报告: " + summaryResult);
+        var aiMessage = AgentMessageState.createAiMessage(finalReply);
         
-        // 构建工具结果字符串，追加到现有结果
-        String updatedToolResults = existingToolResults.isEmpty() ? 
-            "summary: " + summaryResult : 
-            existingToolResults + "\nsummary: " + summaryResult;
-        
-        // 更新状态并返回
+        // 返回最终状态 - 设置finished=true来结束工作流
         return Map.of(
             "currentAgent", "summary",
-            "toolResults", updatedToolResults,
-            "result", summaryResult,  // 设置最终结果
-            "next", "coordinator",
+            "result", finalReply,  // 设置最终结果
+            "finished", true,      // 标记工作流完成
             "messages", aiMessage
         );
     }

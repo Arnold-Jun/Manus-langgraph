@@ -4,7 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhouruojun.manus.model.AgentMessageState;
 import com.zhouruojun.manus.model.NextAction;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -20,8 +21,9 @@ import java.util.Map;
  * LangGraph4j节点基础类
  * 实现NodeAction接口以支持LangGraph4j状态图
  */
-@Slf4j
 public abstract class BaseNode implements NodeAction<AgentMessageState> {
+
+    private static final Logger log = LoggerFactory.getLogger(BaseNode.class);
 
     protected final ChatModel chatModel;
 
@@ -104,9 +106,8 @@ public abstract class BaseNode implements NodeAction<AgentMessageState> {
         if (lower.startsWith("analysis:") || lower.startsWith("分析："))   return NextAction.ANALYSIS.getValue();
         if (lower.startsWith("summary:") || lower.startsWith("总结："))    return NextAction.SUMMARY.getValue();
         if (lower.startsWith("human_input:") || lower.startsWith("用户输入：")) return NextAction.HUMAN_INPUT.getValue();
-        if (lower.startsWith("finish:") || lower.startsWith("完成："))     return NextAction.FINISH.getValue();
 
-        // 4. 最后兜底
-        return NextAction.FINISH.getValue();
+        // 4. 最后兜底 - 默认到summary进行最终处理
+        return NextAction.SUMMARY.getValue();
     }
 }
