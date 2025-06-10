@@ -20,7 +20,7 @@ public class HumanInputNode implements NodeAction<AgentMessageState> {
             log.info("Processing human input node");
             
             // 提示用户需要进一步输入
-            String promptMessage = "需要您的进一步输入。请提供更多信息或澄清您的需求。";
+            String promptMessage = "请询问用户有关问题的更多细节或者补充。";
             var aiMessage = AgentMessageState.createAiMessage(promptMessage);
             
             // 更新状态并返回

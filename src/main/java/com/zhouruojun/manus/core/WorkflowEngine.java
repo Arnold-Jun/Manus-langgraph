@@ -48,7 +48,7 @@ public class WorkflowEngine {
     // 删除旧的构造函数，用这一个替代
     @Autowired
     public WorkflowEngine(ChatModel chatModel,
-                          @org.springframework.beans.factory.annotation.Autowired(required = false)
+                          @Autowired(required = false)
                                  StateSerializer<AgentMessageState> serializer) {
         this.chatModel = chatModel;
         this.checkpointSaver = new MemorySaver();
