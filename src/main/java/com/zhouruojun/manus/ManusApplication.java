@@ -1,7 +1,7 @@
 package com.zhouruojun.manus;
 
-import com.zhouruojun.manus.core.WorkflowEngine;
-import com.zhouruojun.manus.service.InteractionService;
+import com.zhouruojun.manus.domain.workflow.engine.WorkflowEngine;
+import com.zhouruojun.manus.application.service.InteractionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
