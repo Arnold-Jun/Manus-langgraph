@@ -23,6 +23,14 @@ manus:
   max-steps: 20
   max-observe: 10000
   duplicate-threshold: 2
+  prompt:
+    node:
+      coordinator: node/coordinator.txt
+      summary: node/summary.txt
+    agent:
+      search: agent/search.txt
+      analysis: agent/analysis.txt
+      summary: agent/summary.txt
 
 logging:
   level:
