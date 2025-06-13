@@ -6,7 +6,9 @@ import com.zhouruojun.manus.infrastructure.tools.PromptLoader;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 协调器节点 - 负责分析任务并决定下一步行动
@@ -38,9 +40,11 @@ public class CoordinatorNode extends BaseNode {
         }
         
         // 如果有之前的工具结果，包含进来
-        String toolResults = state.toolResults().orElse("");
+        List<String> toolResults = state.toolResults();
         if (!toolResults.isEmpty()) {
-            contextBuilder.append("之前的执行结果: \n").append(toolResults).append("\n");
+            contextBuilder.append("之前的执行结果: \n")
+                        .append(String.join("\n", toolResults))
+                        .append("\n");
         }
         
         // 如果有执行结果，检查是否需要进一步处理

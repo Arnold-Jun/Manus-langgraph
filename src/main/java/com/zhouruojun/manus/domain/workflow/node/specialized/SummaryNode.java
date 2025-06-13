@@ -3,9 +3,11 @@ package com.zhouruojun.manus.domain.workflow.node.specialized;
 import com.zhouruojun.manus.domain.workflow.node.base.BaseNode;
 import com.zhouruojun.manus.domain.model.AgentMessageState;
 import com.zhouruojun.manus.infrastructure.tools.PromptLoader;
+import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -35,20 +37,22 @@ public class SummaryNode extends BaseNode {
             replyContext.append("以下是对话历史记录：\n");
 
             // 获取历史记录
-            java.util.List<com.zhouruojun.manus.domain.model.Message> history = state.getSessionHistory();
+            List<ChatMessage> history = state.sessionHistory();
             for (int i = 0; i < history.size(); i++) {
-                com.zhouruojun.manus.domain.model.Message msg = history.get(i);
-                String roleStr = msg.getRole().getValue();
-                String prefix = "user".equals(roleStr) ? "用户" : "系统";
-                replyContext.append(String.format("%d. %s: %s\n", i+1, prefix, msg.getContent()));
+                ChatMessage msg = history.get(i);
+                String roleStr = msg.type().toString();
+                String prefix = "USER".equals(roleStr) ? "用户" : "系统";
+                replyContext.append(String.format("%d. %s: %s\n", i+1, prefix, msg.toString()));
             }
             replyContext.append("请注意用户可能在询问之前的对话内容、问题或相关信息。\n");
         }
 
         // 检查是否有工具执行结果
-        String existingToolResults = state.toolResults().orElse("");
-        if (!existingToolResults.isEmpty()) {
-            replyContext.append("可用信息: \n").append(existingToolResults).append("\n");
+        List<String> toolResults = state.toolResults();
+        if (!toolResults.isEmpty()) {
+            replyContext.append("可用信息: \n")
+                       .append(String.join("\n", toolResults))
+                       .append("\n");
             replyContext.append("请基于以上信息为用户生成一个完整、有用的回复。");
         } else {
             if (state.hasHistory()) {

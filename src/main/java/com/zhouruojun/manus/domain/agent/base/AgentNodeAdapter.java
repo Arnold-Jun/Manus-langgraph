@@ -1,10 +1,12 @@
 package com.zhouruojun.manus.domain.agent.base;
 
 import com.zhouruojun.manus.domain.model.AgentMessageState;
+import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.NodeAction;
 
 import java.util.Map;
+import java.util.List;
 
 /**
  * Agent到NodeAction的适配器基类
@@ -51,20 +53,22 @@ public abstract class AgentNodeAdapter implements NodeAction<AgentMessageState> 
         String userInput = state.userInput().orElse("");
         
         // 如果有历史记录，处理历史上下文
-        if (state.hasHistory() && !state.getSessionHistory().isEmpty()) {
+        List<ChatMessage> sessionHistory = state.sessionHistory();
+        if (state.hasHistory() && !sessionHistory.isEmpty()) {
             StringBuilder contextBuilder = new StringBuilder();
             contextBuilder.append("【以下是之前的对话历史】\n");
             
-            for (var historyMsg : state.getSessionHistory()) {
-                String rolePrefix = switch (historyMsg.getRole()) {
-                    case USER -> "用户: ";
-                    case ASSISTANT -> "助手: ";
-                    case SYSTEM -> "系统: ";
-                    case TOOL -> "工具: ";
+            for (ChatMessage historyMsg : sessionHistory) {
+                String rolePrefix = switch (historyMsg.type().toString()) {
+                    case "USER" -> "用户: ";
+                    case "AI" -> "助手: ";
+                    case "SYSTEM" -> "系统: ";
+                    case "TOOL_EXECUTION_RESULT" -> "工具: ";
+                    default -> "未知: ";
                 };
 
                 //Todo：优化，使用更智能的摘要算法
-                String content = historyMsg.getContent();
+                String content = historyMsg.toString();
                 if (content != null && content.length() > 100) {
                     content = content.substring(0, 97) + "...";
                 }

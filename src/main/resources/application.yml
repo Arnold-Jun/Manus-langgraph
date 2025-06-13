@@ -9,14 +9,27 @@ spring:
     banner-mode: off
   ai:
     openai:
-      api-key: QST2c24254876416ea3f17fd2c3ee3c0095
-      base-url: http://redservingapi.devops.xiaohongshu.com
-      chat:
-        options:
-          # 模型ID,需要替换为实际的接入点ID
-          model: qwq-32b
-        # Chat接口路径,与OpenAI接口保持一致
-        completions-path: /v1/chat/completions
+      api-key: ${OPENAI_API_KEY}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      model: gpt-3.5-turbo
+      temperature: 0.7
+    mcp:
+      client:
+        enabled: true
+        name: manus-mcp-client
+        version: 1.0.0
+        request-timeout: 30s
+        type: SYNC
+        stdio:
+          root-change-notification: true
+          connections:
+            server1:
+              command: npx
+              args:
+                - -y
+                - "@modelcontextprotocol/server-filesystem"
+                - "/Users/zhouruojun/Desktop"
+                - "/Users/zhouruojun/Downloads"
 
 manus:
   workspace-root: ${user.dir}
@@ -31,10 +44,51 @@ manus:
       search: agent/search.txt
       analysis: agent/analysis.txt
       summary: agent/summary.txt
+  
+  remote-agents:
+    agents:
+      - id: expert_agent
+        name: 专家智能体
+        endpoint: http://localhost:8081/api/agents
+        skills:
+          - id: domain_analysis
+            name: 领域分析
+            description: 对特定领域问题进行深入分析
+            tags:
+              - expert
+              - analysis
+              - domain
+          - id: solution_design
+            name: 方案设计
+            description: 设计解决方案和实施计划
+            tags:
+              - expert
+              - design
+              - solution
+      
+      - id: creative_agent
+        name: 创意智能体
+        endpoint: http://localhost:8082/api/agents
+        skills:
+          - id: idea_generation
+            name: 创意生成
+            description: 生成创新的想法和概念
+            tags:
+              - creative
+              - ideation
+          - id: visual_design
+            name: 视觉设计
+            description: 创建视觉设计方案
+            tags:
+              - creative
+              - design
+              - visual
 
 logging:
   level:
     com.Manus: INFO
     org.springframework.ai: INFO
     org.springframework.boot: WARN
+    com.zhouruojun.manus: DEBUG
+    org.springframework.web: INFO
 

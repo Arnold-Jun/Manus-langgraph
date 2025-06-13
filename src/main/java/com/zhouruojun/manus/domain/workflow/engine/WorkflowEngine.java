@@ -1,6 +1,7 @@
 package com.zhouruojun.manus.domain.workflow.engine;
 
 import com.zhouruojun.manus.domain.workflow.node.AgentNodeFactory;
+import com.zhouruojun.manus.domain.workflow.node.RemoteAgentInvoker;
 import com.zhouruojun.manus.domain.workflow.node.specialized.*;
 import com.zhouruojun.manus.domain.model.AgentMessageState;
 import com.zhouruojun.manus.domain.model.Message;
@@ -22,11 +23,19 @@ import org.bsc.langgraph4j.CompileConfig;
 import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.bsc.langgraph4j.action.EdgeAction;
 import org.bsc.async.AsyncGenerator;
+import com.zhouruojun.manus.infrastructure.a2a.A2aClient;
+import com.zhouruojun.manus.infrastructure.a2a.A2aRegistry;
+import com.zhouruojun.manus.infrastructure.a2a.AgentCapabilities;
+import reactor.core.publisher.Mono;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
+import java.util.HashMap;
+import java.util.function.Function;
+import java.util.Optional;
+import java.util.ArrayList;
 
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
@@ -42,31 +51,35 @@ public class WorkflowEngine {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
 
-    private ChatModel chatModel;
+    private final ChatModel chatModel;
+    private final PromptLoader promptLoader;
+    private final AgentNodeFactory agentNodeFactory;
+    private final A2aClient a2aClient;
+    private final A2aRegistry a2aRegistry;
+    private final PromptConfig promptConfig;
     private MemorySaver checkpointSaver;
     private CompiledGraph<AgentMessageState> compiledGraph;
     private Map<String, AgentMessageState> sessionStates;
     private StateSerializer<AgentMessageState> stateSerializer;
-    private AgentNodeFactory agentNodeFactory;
-    private PromptLoader promptLoader;
-    private PromptConfig promptConfig;
 
-    @Autowired
-    public WorkflowEngine(ChatModel chatModel,
-                          AgentNodeFactory agentNodeFactory,
-                          PromptLoader promptLoader,
-                          PromptConfig promptConfig,
-                          @Autowired(required = false)
-                               StateSerializer<AgentMessageState> serializer) {
+    public WorkflowEngine(
+            ChatModel chatModel,
+            PromptLoader promptLoader,
+            AgentNodeFactory agentNodeFactory,
+            A2aClient a2aClient,
+            A2aRegistry a2aRegistry,
+            PromptConfig promptConfig) {
         this.chatModel = chatModel;
-        this.agentNodeFactory = agentNodeFactory;
         this.promptLoader = promptLoader;
+        this.agentNodeFactory = agentNodeFactory;
+        this.a2aClient = a2aClient;
+        this.a2aRegistry = a2aRegistry;
         this.promptConfig = promptConfig;
         this.checkpointSaver = new MemorySaver();
         this.sessionStates = new ConcurrentHashMap<>();
 
         // 初始化StateSerializer
-        this.stateSerializer = (serializer != null) ? serializer : AgentSerializers.STD.object();
+        this.stateSerializer = AgentSerializers.STD.object();
 
         try {
             this.compiledGraph = buildAgentWorkflow();
@@ -74,6 +87,7 @@ public class WorkflowEngine {
             log.error("工作流构建失败", e);
             throw new RuntimeException("智能体工作流引擎初始化失败", e);
         }
+        log.info("工作流引擎初始化完成");
     }
 
     /**
@@ -88,77 +102,116 @@ public class WorkflowEngine {
         AnalysisAgentNode analysisAgentNode = agentNodeFactory.createAnalysisAgentNode();
         SummaryNode summaryNode = new SummaryNode(chatModel, promptLoader, promptConfig.getNode().getSummary());
         
+        // 创建远程智能体调用器
+        Map<String, RemoteAgentInvoker> remoteAgents = new HashMap<>();
+        List<String> remoteAgentIds = new ArrayList<>();
+        a2aRegistry.getAllAgentIds().forEach(remoteAgentIds::add);
+        
+        if (remoteAgentIds.isEmpty()) {
+            log.info("未发现任何远程智能体配置");
+        } else {
+            log.info("发现 {} 个远程智能体配置，开始初始化...", remoteAgentIds.size());
+            for (String remoteAgentId : remoteAgentIds) {
+                try {
+                    // 首先检查智能体是否可用
+                    a2aClient.checkAgentAvailability(remoteAgentId)
+                            .doOnError(error -> log.warn("远程智能体 {} 当前不可用: {}", 
+                                    remoteAgentId, error.getMessage()))
+                            .onErrorResume(error -> Mono.just(false))
+                            .flatMap(available -> {
+                                if (!available) {
+                                    log.info("远程智能体 {} 当前不可用，将在需要时重试连接", remoteAgentId);
+                                    return Mono.empty();
+                                }
+                                return a2aClient.getAgentCapabilities(remoteAgentId);
+                            })
+                            .doOnError(error -> log.warn("获取智能体 {} 能力描述失败: {}", 
+                                    remoteAgentId, error.getMessage()))
+                            .onErrorResume(error -> Mono.empty())
+                            .subscribe(capabilities -> {
+                                if (capabilities != null && capabilities.getSkills() != null) {
+                                    for (AgentCapabilities.Skill skill : capabilities.getSkills()) {
+                                        String nodeName = remoteAgentId + "_" + skill.getId();
+                                        remoteAgents.put(nodeName,
+                                                new RemoteAgentInvoker(a2aClient, remoteAgentId, skill.getId()));
+                                        log.info("已添加远程智能体节点: {} (技能: {})", remoteAgentId, skill.getId());
+                                    }
+                                }
+                            });
+                } catch (Exception e) {
+                    log.warn("初始化远程智能体 {} 时发生错误，将在后续使用时重试: {}", 
+                            remoteAgentId, e.getMessage());
+                }
+            }
+        }
+        
         // 保留传统的HumanInputNode
         HumanInputNode humanInputNode = new HumanInputNode();
 
         // 路由函数
-        EdgeAction<AgentMessageState> coordinatorRouter = (AgentMessageState state) -> {
-            String next = state.next().orElse("summary_agent");
-            // 确保next值不为空，如果为空或为空字符串，默认为summary_agent
-            if (next == null || next.isEmpty()) {
-                next = "summary_agent";
-            }
-            log.info("Coordinator routing to: {}", next);
-
-            // 映射路由目标到智能体节点
-            Map<String, String> routeMapping = Map.of(
-                "search", "search_agent",
-                "analysis", "analysis_agent",
-                "summary", "summary_agent",
-                "human_input", "human_input"
-            );
-
-            String targetNode = routeMapping.getOrDefault(next, "summary_agent");
-            
-            // 检查映射后的节点是否有效
-            if (!Map.of("search_agent", "search_agent", 
-                       "analysis_agent", "analysis_agent", 
-                       "summary_agent", "summary_agent",
-                       "human_input", "human_input").containsKey(targetNode)) {
-                log.warn("无效的路由目标: {}，默认转为summary_agent", targetNode);
-                targetNode = "summary_agent";
+        EdgeAction<AgentMessageState> routerAction = state -> {
+            if (state.isFinished()) {
+                return END;
             }
 
-            log.info("Final routing target: {}", targetNode);
-            return targetNode;
+            String nextNode = "coordinator";
+            Optional<String> next = state.next();
+            if (next.isPresent()) {
+                nextNode = next.get();
+            }
+
+            // 检查是否是远程智能体调用
+            if (remoteAgents.containsKey(nextNode)) {
+                return nextNode;
+            }
+
+            return switch (nextNode) {
+                case "search" -> "search_agent";
+                case "analysis" -> "analysis_agent";
+                case "summary" -> "summary";
+                case "human_input" -> "human_input";
+                default -> "coordinator";
+            };
         };
 
-        // 构建状态图
-        StateGraph<AgentMessageState> stateGraph = new StateGraph<>(AgentMessageState.SCHEMA, stateSerializer)
-                .addNode("coordinator", node_async(coordinatorNode))
-                .addNode("search_agent", node_async(searchAgentNode))
-                .addNode("analysis_agent", node_async(analysisAgentNode))
-                .addNode("summary_agent", node_async(summaryNode))
-                .addNode("human_input", node_async(humanInputNode))
+        // 构建工作流图
+        StateGraph<AgentMessageState> graph = new StateGraph<>(AgentMessageState.SCHEMA, stateSerializer);
 
-                // 从开始节点到协调器
-                .addEdge(START, "coordinator")
+        // 添加本地节点
+        graph.addNode("coordinator", node_async(coordinatorNode));
+        graph.addNode("search_agent", node_async(searchAgentNode));
+        graph.addNode("analysis_agent", node_async(analysisAgentNode));
+        graph.addNode("summary", node_async(summaryNode));
+        graph.addNode("human_input", node_async(humanInputNode));
 
-                // 协调器的条件边
-                .addConditionalEdges("coordinator",
-                    edge_async(coordinatorRouter),
-                    Map.of(
-                        "search_agent", "search_agent",
-                        "analysis_agent", "analysis_agent",
-                        "summary_agent", "summary_agent",
-                        "human_input", "human_input"
-                    ))
+        // 添加远程节点
+        for (Map.Entry<String, RemoteAgentInvoker> entry : remoteAgents.entrySet()) {
+            graph.addNode(entry.getKey(), node_async(entry.getValue()));
+        }
 
-                // 各专业智能体完成后回到协调器
-                .addEdge("search_agent", "coordinator")
-                .addEdge("analysis_agent", "coordinator")
-                .addEdge("human_input", "coordinator")
-                
-                // summary_agent节点直接连接到END，作为最终输出
-                .addEdge("summary_agent", END)
-                ;
+        // 添加路由边
+        graph.addEdge(START, "coordinator");
+        graph.addConditionalEdges("coordinator", edge_async(routerAction), Map.of(
+            "search_agent", "search_agent",
+            "analysis_agent", "analysis_agent",
+            "summary", "summary",
+            "human_input", "human_input",
+            END, END
+        ));
 
-        // 编译配置
-        CompileConfig compileConfig = CompileConfig.builder()
-                .checkpointSaver(checkpointSaver)
-                .build();
+        // 添加其他节点到coordinator的边
+        graph.addEdge("search_agent", "coordinator");
+        graph.addEdge("analysis_agent", "coordinator");
+        graph.addEdge("summary", "coordinator");
+        graph.addEdge("human_input", "coordinator");
 
-        return stateGraph.compile(compileConfig);
+        // 添加远程节点的边
+        for (String nodeName : remoteAgents.keySet()) {
+            graph.addEdge(nodeName, "coordinator");
+        }
+
+        // 编译图
+        return graph.compile();
     }
 
     /**
@@ -241,9 +294,11 @@ public class WorkflowEngine {
                         }
 
                         // 记录工具调用结果
-                        if (state.toolResults().isPresent()) {
-                            String toolResults = state.toolResults().get();
-                            log.info("节点 {} 的工具执行结果: {}", nodeName, toolResults);
+                        List<String> toolResults = state.toolResults();
+                        if (!toolResults.isEmpty()) {
+                            for (String toolResult : toolResults) {
+                                log.info("节点 {} 的工具执行结果: {}", nodeName, toolResult);
+                            }
                         }
 
                         if (state.isFinished()) {

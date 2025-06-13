@@ -10,6 +10,7 @@ import org.springframework.ai.content.Media;
 import org.springframework.ai.content.MediaContent;
 import org.springframework.util.Assert;
 import org.springframework.util.MimeType;
+import dev.langchain4j.data.message.ChatMessage;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -131,6 +132,32 @@ public class Message implements Serializable {
                 .content(content)
                 .base64Image(base64Image)
                 .toolCallId(toolCallId)
+                .build();
+    }
+
+    /**
+     * Creates a Message instance from a LangChain4j ChatMessage
+     */
+    public static Message fromChatMessage(ChatMessage chatMessage) {
+        String content = chatMessage.toString();
+        Role role;
+
+        if (chatMessage instanceof dev.langchain4j.data.message.UserMessage) {
+            role = Role.USER;
+        }
+        else if (chatMessage instanceof dev.langchain4j.data.message.SystemMessage) {
+            role = Role.SYSTEM;
+        }
+        else if (chatMessage instanceof dev.langchain4j.data.message.AiMessage) {
+            role = Role.ASSISTANT;
+        }
+        else {
+            throw new IllegalArgumentException("Unsupported message type: " + chatMessage.getClass().getName());
+        }
+
+        return Message.builder()
+                .role(role)
+                .content(content)
                 .build();
     }
 
